@@ -2,8 +2,12 @@
 
 @section('content')
 <div class="bg-white shadow-md rounded-lg p-6">
+
     <h1 class="text-2xl font-bold text-gray-800">Bienvenido al Dashboard</h1>
     <p class="mt-4 text-gray-600">Aquí puedes gestionar las operaciones de RYD Jardinería.</p>
+
+    <h1 class="text-3xl font-bold text-blue-500">¡Tailwind CSS está funcionando!</h1>
+
     <div class="mt-6 grid grid-cols-3 gap-4">
         <div class="p-4 bg-indigo-100 rounded-lg">
             <h2 class="text-lg font-bold">Trabajadores</h2>

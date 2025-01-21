@@ -4,30 +4,39 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\User;
-use App\Models\Trabajador;
 use App\Models\Trabajo;
-use App\Models\Encuesta;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // Verifica si el usuario ya existe antes de crearlo
+        // Ejecutar TipoTrabajoSeeder primero
+        $this->call(TipoTrabajoSeeder::class);
+
+        // Crear usuario admin
         if (!User::where('email', 'admin@example.com')->exists()) {
             User::create([
                 'name' => 'Admin',
                 'email' => 'admin@example.com',
                 'password' => bcrypt('admin123'),
+                'role' => 'admin',
             ]);
         }
 
-        // Poblar trabajadores de prueba
-        Trabajador::factory(10)->create();
+        // Crear usuario trabajador de ejemplo
+        if (!User::where('email', 'trabajador@example.com')->exists()) {
+            User::create([
+                'name' => 'Trabajador Demo',
+                'email' => 'trabajador@example.com',
+                'password' => bcrypt('password'),
+                'role' => 'trabajador',
+                'especialidad' => 'Jardinería'
+            ]);
+        }
 
-        // Poblar trabajos de prueba
-        Trabajo::factory(20)->create();
-
-        // Poblar encuestas de prueba
-        Encuesta::factory(15)->create();
+        if (app()->environment('local')) {
+            // Crear algunos trabajos de prueba
+            Trabajo::factory(5)->create();
+        }
     }
 }

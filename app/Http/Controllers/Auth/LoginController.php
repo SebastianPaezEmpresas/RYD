@@ -4,11 +4,10 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Foundation\Auth\AuthenticatesUsers;
+use Illuminate\Http\Request;
 
 class LoginController extends Controller
 {
-    
-
     use AuthenticatesUsers;
 
     /**
@@ -16,7 +15,7 @@ class LoginController extends Controller
      *
      * @var string
      */
-    protected $redirectTo = '/home';
+    protected $redirectTo = '/admin/dashboard';
 
     /**
      * Create a new controller instance.
@@ -26,16 +25,35 @@ class LoginController extends Controller
     public function __construct()
     {
         $this->middleware('guest')->except('logout');
-        $this->middleware('auth')->only('logout');
     }
+
+    /**
+     * Handle user redirection after login.
+     *
+     * @return string
+     */
     protected function redirectTo()
-{
-    if (auth()->user()->email === 'admin@example.com') {
-        return '/admin/dashboard';
+    {
+        if (auth()->user()->email === 'admin@example.com') {
+            return '/admin/dashboard';
+        }
+
+        return '/dashboard';  // Puedes personalizar esto según roles o permisos.
     }
 
-    return '/home'; // Puedes cambiar esto para otros usuarios si es necesario.
-}
+    /**
+     * Logout method override to properly handle redirection.
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function logout(Request $request)
+    {
+        $this->guard()->logout();
 
-    
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/login');
+    }
 }

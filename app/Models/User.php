@@ -21,6 +21,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
+        'especialidad',
     ];
 
     /**
@@ -42,4 +44,34 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
+
+    /**
+     * Check if the user is a worker
+     *
+     * @return bool
+     */
+    public function isTrabajador()
+    {
+        return $this->role === 'trabajador';
+    }
+
+    /**
+     * Check if the user is an admin
+     *
+     * @return bool
+     */
+    public function isAdmin()
+    {
+        return $this->role === 'admin';
+    }
+
+    /**
+     * Get all jobs assigned to this worker
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function trabajos()
+    {
+        return $this->hasMany(Trabajo::class, 'trabajador_id');
+    }
 }

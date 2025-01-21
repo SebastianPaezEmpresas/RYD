@@ -15,9 +15,9 @@
             </div>
             <nav class="mt-4">
                 <a href="{{ route('admin.dashboard') }}" class="block py-2 px-4 hover:bg-indigo-700">Dashboard</a>
-                <a href="{{ route('admin.trabajadores') }}" class="block py-2 px-4 hover:bg-indigo-700">Trabajadores</a>
-                <a href="{{ route('admin.trabajos') }}" class="block py-2 px-4 hover:bg-indigo-700">Trabajos</a>
-                <a href="{{ route('admin.encuestas') }}" class="block py-2 px-4 hover:bg-indigo-700">Encuestas</a>
+                <a href="{{ route('admin.trabajadores.index') }}" class="block py-2 px-4 hover:bg-indigo-700">Trabajadores</a>
+                <a href="{{ route('admin.trabajos.index') }}" class="block py-2 px-4 hover:bg-indigo-700">Trabajos</a>
+                <a href="{{ route('admin.encuestas.index') }}" class="block py-2 px-4 hover:bg-indigo-700">Encuestas</a>
                 <a href="{{ route('logout') }}" class="block py-2 px-4 hover:bg-indigo-700"
                    onclick="event.preventDefault(); document.getElementById('logout-form').submit();">Cerrar Sesión</a>
                 <form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">

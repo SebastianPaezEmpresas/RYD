@@ -2,10 +2,19 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Encuesta extends Model
 {
-    use HasFactory;
+    protected $fillable = [
+        'trabajo_id',
+        'puntuacion',
+        'comentario',
+        'completada'
+    ];
+
+    public function trabajo()
+    {
+        return $this->belongsTo(Trabajo::class);
+    }
 }
