@@ -3,250 +3,302 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Trabajo;
-use App\Models\TipoTrabajo;
-use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
+use App\Models\Trabajo;
+use App\Models\Trabajador;
+use App\Models\TipoTrabajo;
+use App\Models\Encuesta;
+use Carbon\Carbon;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\TrabajoAsignado;
-use App\Mail\TrabajoCompletado;
+use Illuminate\Support\Facades\Storage;
 
 class TrabajoController extends Controller
 {
-    public function index()
-    {
-        // Obtener trabajadores
-        $trabajadores = User::where('role', 'trabajador')
-                          ->orderBy('name')
-                          ->get(['id', 'name', 'especialidad']);
-        
-        // Obtener tipos de trabajo
-        $tiposTrabajos = TipoTrabajo::orderBy('nombre')->get();
-        
-        // Obtener todos los trabajos con sus relaciones
-        $trabajos = Trabajo::with(['trabajador', 'tipoTrabajo'])
-                          ->orderBy('fecha_inicio', 'desc')
-                          ->get();
-        
-        // Obtener próximos trabajos (siguientes 5 días)
-        $proximosTrabajos = Trabajo::with('trabajador')
-            ->where('fecha_inicio', '>', now())
-            ->where('fecha_inicio', '<=', now()->addDays(5))
-            ->orderBy('fecha_inicio')
-            ->get();
-            
-        // Preparar datos para el calendario
-        $trabajosCalendario = $trabajos->map(function ($trabajo) {
-            return [
-                'id' => $trabajo->id,
-                'title' => $trabajo->titulo,
-                'start' => $trabajo->fecha_inicio->format('Y-m-d H:i:s'),
-                'end' => $trabajo->fecha_fin->format('Y-m-d H:i:s'),
-                'backgroundColor' => $this->getStatusColor($trabajo->estado),
-                'borderColor' => $this->getStatusColor($trabajo->estado),
-                'extendedProps' => [
-                    'descripcion' => Str::limit($trabajo->descripcion, 100),
-                    'trabajador' => $trabajo->trabajador->name,
-                    'estado' => $trabajo->estado,
-                    'tipo' => $trabajo->tipoTrabajo->nombre
-                ]
-            ];
-        });
+   public function index()
+   {
+       $trabajadores = Trabajador::all();
+       $tipoTrabajos = TipoTrabajo::all();
+       
+       $eventos = Trabajo::with(['trabajador', 'tipoTrabajo', 'cliente'])
+           ->get()
+           ->map(function ($trabajo) {
+               $event = $trabajo->toCalendarEvent();
+               $event['id'] = $trabajo->id;
+               $event['editable'] = true;
+               return $event;
+           });
 
-        return view('admin.trabajos.index', compact(
-            'trabajos',
-            'trabajadores',
-            'tiposTrabajos',
-            'proximosTrabajos',
-            'trabajosCalendario'
-        ));
-    }
+       return view('admin.trabajos.index', compact('trabajadores', 'tipoTrabajos', 'eventos'));
+   }
 
-    public function store(Request $request)
-    {
-        $validatedData = $request->validate([
-            'titulo' => 'required|max:255',
-            'descripcion' => 'required',
-            'estado' => 'required|in:pendiente,en_progreso,completado',
-            'fecha_inicio' => 'required|date',
-            'fecha_fin' => 'required|date|after:fecha_inicio',
-            'trabajador_id' => 'required|exists:users,id',
-            'tipo_trabajo_id' => 'required|exists:tipo_trabajos,id',
-            'cliente_email' => 'nullable|email',
-            'evidencias' => 'nullable|array|max:5',
-            'evidencias.*' => 'file|mimes:jpeg,png,jpg,pdf,doc,docx|max:3072'
-        ]);
+   public function store(Request $request)
+   {
+       $validatedData = $request->validate([
+           'titulo' => 'required|string|max:255',
+           'descripcion' => 'nullable|string',
+           'trabajador_id' => 'required|exists:trabajadores,id',
+           'tipo_trabajo_id' => 'nullable|exists:tipo_trabajos,id',
+           'estado' => 'required|in:pendiente,en_progreso,completado',
+           'fecha_inicio' => 'required|date',
+           'fecha_fin' => 'nullable|date|after_or_equal:fecha_inicio',
+           'fecha_realizacion' => 'nullable|date',
+           'cliente_email' => 'nullable|email',
+           'notas_finales' => 'nullable|string'
+       ]);
 
-        $evidencias = [];
-        if ($request->hasFile('evidencias')) {
-            foreach ($request->file('evidencias') as $file) {
-                $path = $file->store('evidencias', 'public');
-                $evidencias[] = [
-                    'path' => $path,
-                    'nombre' => $file->getClientOriginalName(),
-                    'tipo' => $file->getClientMimeType()
-                ];
-            }
-        }
+       try {
+           $validatedData['link_compartido'] = Str::random(32);
+           $trabajo = Trabajo::create($validatedData);
+           
+           if (!empty($validatedData['cliente_email'])) {
+               Encuesta::create([
+                   'trabajo_id' => $trabajo->id,
+                   'token' => Str::random(40),
+                   'estado' => 'pendiente'
+               ]);
+           }
 
-        $trabajo = Trabajo::create([
-            ...$validatedData,
-            'evidencias_inicio' => $evidencias,
-            'link_compartido' => Str::random(32)
-        ]);
+           if ($request->hasFile('evidencias_inicio')) {
+               $evidencias = [];
+               foreach ($request->file('evidencias_inicio') as $file) {
+                   $path = $file->store('evidencias/inicio', 'public');
+                   $evidencias[] = $path;
+               }
+               $trabajo->evidencias_inicio = $evidencias;
+               $trabajo->save();
+           }
 
-        // Enviar notificación al trabajador
-        if ($trabajo->trabajador->email) {
-            try {
-                Mail::to($trabajo->trabajador->email)
-                    ->send(new TrabajoAsignado($trabajo));
-            } catch (\Exception $e) {
-                // Log el error pero continuar
-                \Log::error("Error enviando email: " . $e->getMessage());
-            }
-        }
+           return response()->json([
+               'success' => true,
+               'message' => 'Trabajo creado con éxito',
+               'evento' => $trabajo->toCalendarEvent()
+           ]);
+       } catch (\Exception $e) {
+           return response()->json([
+               'success' => false,
+               'message' => 'Error al crear el trabajo: ' . $e->getMessage()
+           ], 500);
+       }
+   }
 
-        return redirect()->route('admin.trabajos.index')
-            ->with('success', 'Trabajo creado exitosamente');
-    }
+   public function show(Trabajo $trabajo)
+   {
+       try {
+           $trabajo->load(['trabajador', 'tipoTrabajo', 'cliente', 'encuesta']);
+           
+           if (request()->wantsJson()) {
+               return response()->json([
+                   'success' => true,
+                   'trabajo' => $trabajo
+               ]);
+           }
+           
+           return view('admin.trabajos.show', compact('trabajo'));
+       } catch (\Exception $e) {
+           if (request()->wantsJson()) {
+               return response()->json([
+                   'success' => false,
+                   'message' => 'Error al cargar el trabajo: ' . $e->getMessage()
+               ], 500);
+           }
+           
+           return back()->with('error', 'Error al cargar el trabajo');
+       }
+   }
 
-    public function show($id)
-    {
-        $trabajo = Trabajo::with(['trabajador', 'tipoTrabajo'])->findOrFail($id);
-        return view('admin.trabajos.show', compact('trabajo'));
-    }
+   public function update(Request $request, Trabajo $trabajo)
+   {
+       $validatedData = $request->validate([
+           'titulo' => 'required|string|max:255',
+           'descripcion' => 'nullable|string',
+           'trabajador_id' => 'required|exists:trabajadores,id',
+           'tipo_trabajo_id' => 'nullable|exists:tipo_trabajos,id',
+           'estado' => 'required|in:pendiente,en_progreso,completado',
+           'fecha_inicio' => 'required|date',
+           'fecha_fin' => 'nullable|date|after_or_equal:fecha_inicio',
+           'fecha_realizacion' => 'nullable|date',
+           'cliente_email' => 'nullable|email',
+           'notas_finales' => 'nullable|string'
+       ]);
 
-    public function edit($id)
-    {
-        $trabajo = Trabajo::findOrFail($id);
-        $trabajadores = User::where('role', 'trabajador')->get();
-        $tiposTrabajos = TipoTrabajo::all();
-        
-        return view('admin.trabajos.edit', compact('trabajo', 'trabajadores', 'tiposTrabajos'));
-    }
+       try {
+           if (!empty($validatedData['cliente_email']) && !$trabajo->encuesta) {
+               Encuesta::create([
+                   'trabajo_id' => $trabajo->id,
+                   'token' => Str::random(40),
+                   'estado' => 'pendiente'
+               ]);
+           }
 
-    public function update(Request $request, $id)
-    {
-        $trabajo = Trabajo::findOrFail($id);
-        
-        $validatedData = $request->validate([
-            'titulo' => 'required|max:255',
-            'descripcion' => 'required',
-            'estado' => 'required|in:pendiente,en_progreso,completado',
-            'fecha_inicio' => 'required|date',
-            'fecha_fin' => 'required|date|after:fecha_inicio',
-            'trabajador_id' => 'required|exists:users,id',
-            'tipo_trabajo_id' => 'required|exists:tipo_trabajos,id',
-            'cliente_email' => 'nullable|email',
-            'evidencias' => 'nullable|array|max:5',
-            'evidencias.*' => 'file|mimes:jpeg,png,jpg,pdf,doc,docx|max:3072'
-        ]);
+           $trabajo->update($validatedData);
 
-        if ($request->hasFile('evidencias')) {
-            $evidencias = $trabajo->evidencias_inicio ?? [];
-            foreach ($request->file('evidencias') as $file) {
-                $path = $file->store('evidencias', 'public');
-                $evidencias[] = [
-                    'path' => $path,
-                    'nombre' => $file->getClientOriginalName(),
-                    'tipo' => $file->getClientMimeType()
-                ];
-            }
-            $validatedData['evidencias_inicio'] = $evidencias;
-        }
+           if ($request->hasFile('evidencias_fin')) {
+               $evidencias = $trabajo->evidencias_fin ?? [];
+               foreach ($request->file('evidencias_fin') as $file) {
+                   $path = $file->store('evidencias/fin', 'public');
+                   $evidencias[] = $path;
+               }
+               $trabajo->evidencias_fin = $evidencias;
+               $trabajo->save();
+           }
 
-        $trabajo->update($validatedData);
+           $trabajo = $trabajo->fresh();
+           $evento = $trabajo->toCalendarEvent();
+           $evento['id'] = $trabajo->id;
+           
+           return response()->json([
+               'success' => true,
+               'message' => 'Trabajo actualizado con éxito',
+               'evento' => $evento
+           ]);
+       } catch (\Exception $e) {
+           return response()->json([
+               'success' => false,
+               'message' => 'Error al actualizar el trabajo: ' . $e->getMessage()
+           ], 500);
+       }
+   }
 
-        return redirect()->route('admin.trabajos.show', $trabajo->id)
-            ->with('success', 'Trabajo actualizado exitosamente');
-    }
+   public function destroy(Trabajo $trabajo)
+   {
+       try {
+           if (!empty($trabajo->evidencias_inicio)) {
+               foreach ($trabajo->evidencias_inicio as $evidencia) {
+                   Storage::disk('public')->delete($evidencia);
+               }
+           }
+           if (!empty($trabajo->evidencias_fin)) {
+               foreach ($trabajo->evidencias_fin as $evidencia) {
+                   Storage::disk('public')->delete($evidencia);
+               }
+           }
 
-    public function destroy($id)
-    {
-        $trabajo = Trabajo::findOrFail($id);
-        
-        // Eliminar evidencias
-        if (!empty($trabajo->evidencias_inicio)) {
-            foreach ($trabajo->evidencias_inicio as $evidencia) {
-                Storage::disk('public')->delete($evidencia['path']);
-            }
-        }
-        if (!empty($trabajo->evidencias_fin)) {
-            foreach ($trabajo->evidencias_fin as $evidencia) {
-                Storage::disk('public')->delete($evidencia['path']);
-            }
-        }
+           if ($trabajo->encuesta) {
+               $trabajo->encuesta->delete();
+           }
 
-        $trabajo->delete();
+           $trabajo->delete();
+           
+           if (request()->wantsJson()) {
+               return response()->json([
+                   'success' => true,
+                   'message' => 'Trabajo eliminado con éxito'
+               ]);
+           }
 
-        return redirect()->route('admin.trabajos.index')
-            ->with('success', 'Trabajo eliminado exitosamente');
-    }
+           return redirect()->route('admin.trabajos.index')
+                          ->with('success', 'Trabajo eliminado con éxito');
+       } catch (\Exception $e) {
+           if (request()->wantsJson()) {
+               return response()->json([
+                   'success' => false,
+                   'message' => 'Error al eliminar el trabajo: ' . $e->getMessage()
+               ], 500);
+           }
 
-    public function completar(Request $request, $id)
-    {
-        $trabajo = Trabajo::findOrFail($id);
-        
-        $validatedData = $request->validate([
-            'evidencias_fin' => 'required|array|max:5',
-            'evidencias_fin.*' => 'file|mimes:jpeg,png,jpg,pdf,doc,docx|max:3072',
-            'notas_finales' => 'required|string'
-        ]);
+           return back()->with('error', 'Error al eliminar el trabajo');
+       }
+   }
 
-        $evidenciasFin = [];
-        foreach ($request->file('evidencias_fin') as $file) {
-            $path = $file->store('evidencias', 'public');
-            $evidenciasFin[] = [
-                'path' => $path,
-                'nombre' => $file->getClientOriginalName(),
-                'tipo' => $file->getClientMimeType()
-            ];
-        }
+   public function filtrar(Request $request)
+   {
+       try {
+           $query = Trabajo::with(['trabajador', 'tipoTrabajo', 'cliente', 'encuesta']);
 
-        $trabajo->update([
-            'estado' => 'completado',
-            'evidencias_fin' => $evidenciasFin,
-            'notas_finales' => $request->notas_finales
-        ]);
+           if ($request->has('id')) {
+               $query->where('id', $request->id);
+           }
 
-        // Enviar notificación al cliente
-        if ($trabajo->cliente_email) {
-            try {
-                Mail::to($trabajo->cliente_email)
-                    ->send(new TrabajoCompletado($trabajo));
-            } catch (\Exception $e) {
-                \Log::error("Error enviando email: " . $e->getMessage());
-            }
-        }
+           if ($request->estado) {
+               $query->where('estado', $request->estado);
+           }
 
-        return redirect()->route('admin.trabajos.show', $trabajo)
-            ->with('success', 'Trabajo marcado como completado');
-    }
+           if ($request->trabajador_id) {
+               $query->where('trabajador_id', $request->trabajador_id);
+           }
 
-    private function getStatusColor($estado)
-    {
-        return [
-            'pendiente' => '#FCD34D',    // yellow-400
-            'en_progreso' => '#60A5FA',  // blue-400
-            'completado' => '#34D399',   // green-400
-        ][$estado] ?? '#9CA3AF';         // gray-400 default
-    }
+           if ($request->fecha_inicio) {
+               $query->whereDate('fecha_inicio', '>=', $request->fecha_inicio);
+           }
 
-    public function uploadEvidencia(Request $request)
-    {
-        $request->validate([
-            'file' => 'required|file|mimes:jpeg,png,jpg,pdf,doc,docx|max:3072'
-        ]);
+           if ($request->fecha_fin) {
+               $query->whereDate('fecha_fin', '<=', $request->fecha_fin);
+           }
 
-        $file = $request->file('file');
-        $path = $file->store('temp-evidencias', 'public');
-        
-        return response()->json([
-            'path' => $path,
-            'nombre' => $file->getClientOriginalName(),
-            'tipo' => $file->getClientMimeType()
-        ]);
-    }
+           $trabajos = $query->get();
+
+           if ($request->wantsJson()) {
+               return response()->json([
+                   'success' => true,
+                   'data' => $trabajos->map(function($trabajo) {
+                       return [
+                           'id' => $trabajo->id,
+                           'titulo' => $trabajo->titulo,
+                           'descripcion' => $trabajo->descripcion,
+                           'estado' => $trabajo->estado,
+                           'fecha_inicio' => $trabajo->fecha_inicio,
+                           'fecha_fin' => $trabajo->fecha_fin,
+                           'trabajador' => $trabajo->trabajador,
+                           'tipo_trabajo' => $trabajo->tipoTrabajo,
+                           'cliente_email' => $trabajo->cliente_email
+                       ];
+                   })
+               ]);
+           }
+
+           return $trabajos->map(function($trabajo) {
+               $event = $trabajo->toCalendarEvent();
+               $event['id'] = $trabajo->id;
+               $event['editable'] = true;
+               return $event;
+           });
+       } catch (\Exception $e) {
+           if ($request->wantsJson()) {
+               return response()->json([
+                   'success' => false,
+                   'message' => 'Error al filtrar trabajos: ' . $e->getMessage()
+               ], 500);
+           }
+           throw $e;
+       }
+   }
+
+   public function actualizarFechas(Request $request, Trabajo $trabajo)
+   {
+       $validatedData = $request->validate([
+           'fecha_inicio' => 'required|date',
+           'fecha_fin' => 'nullable|date|after_or_equal:fecha_inicio'
+       ]);
+
+       try {
+           $trabajo->update($validatedData);
+           
+           return response()->json([
+               'success' => true,
+               'message' => 'Fechas actualizadas con éxito',
+               'evento' => $trabajo->toCalendarEvent()
+           ]);
+       } catch (\Exception $e) {
+           return response()->json([
+               'success' => false,
+               'message' => 'Error al actualizar las fechas: ' . $e->getMessage()
+           ], 500);
+       }
+   }
+
+   public function getDetalle(Trabajo $trabajo)
+   {
+       try {
+           $trabajo->load(['trabajador', 'tipoTrabajo', 'cliente', 'encuesta']);
+           return response()->json([
+               'success' => true,
+               'trabajo' => $trabajo
+           ]);
+       } catch (\Exception $e) {
+           return response()->json([
+               'success' => false,
+               'message' => 'Error al cargar los detalles del trabajo: ' . $e->getMessage()
+           ], 500);
+       }
+   }
 }

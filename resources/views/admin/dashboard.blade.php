@@ -15,20 +15,19 @@
                 </div>
                 <!-- Enlaces de Navegación Principal -->
                 <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
-                    <a href="{{ route('admin.dashboard') }}" class="border-transparent text-gray-500 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                        Dashboard
-                    </a>
-                    <a href="{{ route('admin.trabajadores.index') }}" class="border-indigo-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                        Trabajadores
-                    </a>
-                    <a href="#" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                        Trabajos
-                    </a>
-                    <a href="#" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                        Encuestas
-                    </a>
-                </div>
-            </div>
+    <a href="{{ route('admin.dashboard') }}" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium {{ Route::is('admin.dashboard') ? 'border-indigo-500 text-gray-900' : '' }}">
+        Dashboard
+    </a>
+    <a href="{{ route('admin.trabajadores.index') }}" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium {{ Route::is('admin.trabajadores.*') ? 'border-indigo-500 text-gray-900' : '' }}">
+        Trabajadores
+    </a>
+    <a href="{{ route('admin.trabajos.index') }}" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium {{ Route::is('admin.trabajos.*') ? 'border-indigo-500 text-gray-900' : '' }}">
+        Trabajos
+    </a>
+    <a href="{{ route('admin.encuestas.index') }}" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium {{ Route::is('admin.encuestas.*') ? 'border-indigo-500 text-gray-900' : '' }}">
+        Encuestas
+    </a>
+</div>
             <!-- Menú Usuario -->
             <div class="hidden sm:ml-6 sm:flex sm:items-center">
                 <button class="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">

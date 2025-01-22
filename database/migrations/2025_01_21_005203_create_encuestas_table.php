@@ -10,16 +10,17 @@ return new class extends Migration
     {
         Schema::create('encuestas', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('trabajo_id')->constrained('trabajos')->onDelete('cascade');
-            $table->integer('puntuacion');
-            $table->text('comentario')->nullable();
-            $table->boolean('completada')->default(false);
+            $table->foreignId('trabajo_id')->constrained()->onDelete('cascade');
+            $table->string('token')->unique();
+            $table->integer('calificacion_general')->nullable();
+            $table->integer('puntualidad')->nullable();
+            $table->integer('calidad_trabajo')->nullable();
+            $table->integer('profesionalismo')->nullable();
+            $table->text('comentarios')->nullable();
+            $table->datetime('fecha_envio')->nullable();
+            $table->datetime('fecha_respuesta')->nullable();
+            $table->string('estado')->default('pendiente'); // pendiente, enviada, respondida
             $table->timestamps();
         });
-    }
-
-    public function down()
-    {
-        Schema::dropIfExists('encuestas');
     }
 };

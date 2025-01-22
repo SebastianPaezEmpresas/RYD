@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\TrabajadoresController;
 use App\Http\Controllers\Admin\TrabajoController;
 use App\Http\Controllers\Admin\EncuestaController;
+use App\Http\Controllers\EncuestaPublicController;
 
 // Ruta de bienvenida
 Route::get('/', function () {
@@ -25,31 +26,34 @@ Route::middleware('auth')->group(function () {
 });
 
 // Rutas de administración
-Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(function () {
+    // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    // Rutas para trabajadores
-    Route::get('/trabajadores', [TrabajadoresController::class, 'index'])->name('trabajadores.index');
-    Route::get('/trabajadores/create', [TrabajadoresController::class, 'create'])->name('trabajadores.create');
-    Route::post('/trabajadores', [TrabajadoresController::class, 'store'])->name('trabajadores.store');
-    Route::get('/trabajadores/{id}/edit', [TrabajadoresController::class, 'edit'])->name('trabajadores.edit');
-    Route::put('/trabajadores/{id}', [TrabajadoresController::class, 'update'])->name('trabajadores.update');
-    Route::delete('/trabajadores/{id}', [TrabajadoresController::class, 'destroy'])->name('trabajadores.destroy');
 
-    // Rutas para trabajos
-    Route::get('/trabajos', [TrabajoController::class, 'index'])->name('trabajos.index');
-    Route::get('/trabajos/create', [TrabajoController::class, 'create'])->name('trabajos.create');
-    Route::post('/trabajos', [TrabajoController::class, 'store'])->name('trabajos.store');
-    Route::get('/trabajos/{id}/edit', [TrabajoController::class, 'edit'])->name('trabajos.edit');
-    Route::put('/trabajos/{id}', [TrabajoController::class, 'update'])->name('trabajos.update');
-    Route::delete('/trabajos/{id}', [TrabajoController::class, 'destroy'])->name('trabajos.destroy');
+    // Trabajadores
+    Route::resource('trabajadores', TrabajadoresController::class);
 
-    // Rutas para encuestas
-    Route::get('/encuestas', [EncuestaController::class, 'index'])->name('encuestas.index');
-    Route::get('/encuestas/create', [EncuestaController::class, 'create'])->name('encuestas.create');
-    Route::post('/encuestas', [EncuestaController::class, 'store'])->name('encuestas.store');
-    Route::get('/encuestas/{id}/edit', [EncuestaController::class, 'edit'])->name('encuestas.edit');
-    Route::put('/encuestas/{id}', [EncuestaController::class, 'update'])->name('encuestas.update');
-    Route::delete('/encuestas/{id}', [EncuestaController::class, 'destroy'])->name('encuestas.destroy');
+    // Trabajos
+    Route::get('/trabajos/filtrar', [TrabajoController::class, 'filtrar'])->name('trabajos.filtrar');
+    Route::patch('/trabajos/{trabajo}/fechas', [TrabajoController::class, 'actualizarFechas'])
+        ->name('trabajos.actualizarFechas');
+    Route::resource('trabajos', TrabajoController::class);
+
+    // Encuestas
+    Route::controller(EncuestaController::class)->group(function () {
+        Route::get('/encuestas/exportar', 'exportar')->name('encuestas.exportar');
+        Route::get('/encuestas/estadisticas', 'estadisticas')->name('encuestas.estadisticas');
+        Route::post('/encuestas/{encuesta}/enviar', 'enviar')->name('encuestas.enviar');
+        Route::post('/encuestas/{encuesta}/reenviar', 'reenviar')->name('encuestas.reenviar');
+    });
+    Route::resource('encuestas', EncuestaController::class);
+});
+
+// Rutas públicas para encuestas
+Route::controller(EncuestaPublicController::class)->group(function () {
+    Route::get('/encuesta/{token}', 'show')->name('encuesta.publica');
+    Route::post('/encuesta/{token}', 'store')->name('encuesta.responder');
+    Route::get('/encuesta/gracias', 'gracias')->name('encuesta.gracias');
 });
 
 // Autenticación
